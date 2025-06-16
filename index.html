@@ -57,7 +57,7 @@
 
     <main class="w-full max-w-4xl flex flex-col items-center">
         <!-- Add New Link Section -->
-        <section class="bg-white shadow-lg rounded-2xl p-6 mb-8 w-full">
+        <section id="addLinkSection" class="bg-white shadow-lg rounded-2xl p-6 mb-8 w-full">
             <h2 class="text-2xl font-semibold text-gray-700 mb-4 text-center">أضف رابطًا تعليميًا جديدًا</h2>
             <div class="flex flex-col gap-4 mb-4">
                 <input type="text" id="linkNameInput" placeholder="اسم الرابط (مثال: قناة البرمجة للمبتدئين)"
@@ -185,6 +185,7 @@
         let auth;
         let userId = '';
         let firebaseInitialized = false; // Flag to track full Firebase initialization
+        let adminAuthenticatedSession = false; // Flag to indicate if the current session is an admin session
         let allLinks = []; // Store all fetched links for client-side filtering
         const collectionPath = `/artifacts/${appId}/public/data/learningLinks`; // New collection name
 
@@ -196,6 +197,7 @@
         const addLinkButton = document.getElementById('addLinkButton');
         const messageBox = document.getElementById('messageBox');
         const userIdDisplay = document.getElementById('userIdDisplay');
+        const addLinkSection = document.getElementById('addLinkSection'); // Reference to the add link section
 
         // DOM elements for displaying links
         const linksList = document.getElementById('linksList');
@@ -213,7 +215,7 @@
         const editLinkName = document.getElementById('editLinkName');
         const editLinkUrl = document.getElementById('editLinkUrl');
         const editLinkType = document.getElementById('editLinkType'); // Display only
-        const editCategory = document.getElementById('editCategory'); // Corrected line
+        const editCategory = document.getElementById('editCategory');
         const saveEditButton = document.getElementById('saveEditButton');
         const cancelEditButton = document.getElementById('cancelEditButton');
 
@@ -262,10 +264,15 @@
                     return; // Stop initialization if config is bad
                 }
 
+                // Determine if this session is authenticated via initial token
+                const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                if (initialAuthToken) {
+                    adminAuthenticatedSession = true; // This session is authenticated and thus the admin session.
+                }
+
                 // If app is already initialized, just ensure listeners are set up
                 if (app) {
                     console.log("Firebase app already initialized. Proceeding with auth check and listeners.");
-                    // Directly proceed to auth state check to re-confirm user and setup listeners
                     onAuthStateChanged(auth, (user) => {
                         console.log("onAuthStateChanged fired (re-init path). User:", user);
                         if (user) {
@@ -276,9 +283,17 @@
                             userIdDisplay.textContent = userId + ' (مجهول)';
                         }
                         firebaseInitialized = true;
-                        addLinkButton.disabled = false;
-                        addLinkButton.classList.remove('opacity-50', 'cursor-not-allowed');
-                        console.log("Firebase is fully initialized and UI enabled (re-init path).");
+                        // Control visibility and enablement based on admin status
+                        if (adminAuthenticatedSession) {
+                            addLinkSection.style.display = 'block';
+                            addLinkButton.disabled = false;
+                            addLinkButton.classList.remove('opacity-50', 'cursor-not-allowed');
+                            console.log("Admin privileges granted for this session (re-init path).");
+                        } else {
+                            addLinkSection.style.display = 'none'; // Hide for non-admin
+                            console.log("User is not admin for this session (re-init path).");
+                        }
+                        console.log("Firebase is fully initialized and UI updated based on admin status (re-init path).");
                         setupFirestoreListeners();
                     });
                     return;
@@ -291,12 +306,12 @@
                 console.log("Firebase app, db, auth initialized.");
                 console.log("db object right after assignment:", db);
 
+                // Initially hide the add link section and disable the button
                 addLinkButton.disabled = true;
                 addLinkButton.classList.add('opacity-50', 'cursor-not-allowed');
+                addLinkSection.style.display = 'none'; // Hide by default
                 userIdDisplay.textContent = 'جاري التحميل...';
                 loadingMessage.textContent = 'جاري تحميل الروابط...'; // Reset loading message
-
-                const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
                 try {
                     if (initialAuthToken) {
@@ -319,15 +334,26 @@
                     if (user) {
                         userId = user.uid;
                         userIdDisplay.textContent = userId;
+                        // Control visibility and enablement based on admin status
+                        if (adminAuthenticatedSession) {
+                            addLinkSection.style.display = 'block'; // Show for admin
+                            addLinkButton.disabled = false;
+                            addLinkButton.classList.remove('opacity-50', 'cursor-not-allowed');
+                            console.log("Admin privileges granted for this session.");
+                        } else {
+                            addLinkSection.style.display = 'none'; // Hide for non-admin
+                            console.log("User is not the admin for this session.");
+                        }
                     } else {
+                        // User is signed out or anonymous.
                         userId = crypto.randomUUID();
                         userIdDisplay.textContent = userId + ' (مجهول)';
+                        addLinkSection.style.display = 'none'; // Always hide for anonymous/signed out
+                        console.log("User is anonymous. Not granting admin privileges.");
                     }
-                    firebaseInitialized = true;
-                    addLinkButton.disabled = false;
-                    addLinkButton.classList.remove('opacity-50', 'cursor-not-allowed');
-                    console.log("Firebase is fully initialized and UI enabled.");
-                    setupFirestoreListeners();
+                    firebaseInitialized = true; // Firebase is ready for use, regardless of admin status
+                    console.log("Firebase is fully initialized and UI updated based on admin status.");
+                    setupFirestoreListeners(); // Setup listeners *only* when ready
                 });
 
             } catch (error) {
@@ -347,11 +373,11 @@
          */
         async function addLink() {
             console.log("addLink called. firebaseInitialized:", firebaseInitialized, "db:", db);
-            if (!firebaseInitialized || !db) {
-                showMessage('الرجاء الانتظار حتى يتم تحميل النظام بالكامل قبل إضافة رابط. يتم إعادة التهيئة تلقائياً.', 'info');
-                console.error("Firebase not ready or db not initialized for addLink.");
+            if (!firebaseInitialized || !db || !adminAuthenticatedSession) { // Added adminAuthenticatedSession check
+                showMessage('ليس لديك الصلاحية لإضافة روابط.', 'error');
+                console.error("Firebase not ready or db not initialized or user is not admin for addLink.");
                 // Attempt to re-initialize if not ready
-                if (!db) { // Only if db object is missing
+                if (!db && !firebaseInitialized) {
                     initializeFirebase();
                 }
                 return;
@@ -440,6 +466,21 @@
                     default: typeLabel = 'غير معروف'; typeClass = ''; break;
                 }
 
+                // Add edit/delete buttons only if the current session is authenticated as admin
+                let adminButtons = '';
+                if (adminAuthenticatedSession) {
+                    adminButtons = `
+                        <button data-id="${link.id}" data-name="${link.name}" data-url="${link.url}" data-category="${link.category || ''}" data-type="${link.type}"
+                                class="edit-button bg-yellow-500 text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-yellow-600 transition duration-300 shadow-md">
+                            تعديل
+                        </button>
+                        <button data-id="${link.id}"
+                                class="delete-button bg-red-500 text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-red-600 transition duration-300 shadow-md">
+                            حذف
+                        </button>
+                    `;
+                }
+
                 linkElement.innerHTML = `
                     <h3 class="text-xl font-medium text-gray-800 mb-1 ${typeClass}">${link.name}</h3>
                     <p class="text-gray-500 text-sm mb-2">التصنيف: ${link.category || 'غير مصنف'}</p>
@@ -449,38 +490,34 @@
                            class="inline-block bg-green-500 text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-green-600 transition duration-300 shadow-md">
                             مشاهدة
                         </a>
-                        <button data-id="${link.id}" data-name="${link.name}" data-url="${link.url}" data-category="${link.category || ''}" data-type="${link.type}"
-                                class="edit-button bg-yellow-500 text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-yellow-600 transition duration-300 shadow-md">
-                            تعديل
-                        </button>
-                        <button data-id="${link.id}"
-                                class="delete-button bg-red-500 text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-red-600 transition duration-300 shadow-md">
-                            حذف
-                        </button>
+                        ${adminButtons}
                     </div>
                 `;
                 linksList.appendChild(linkElement);
             });
 
-            document.querySelectorAll('.edit-button').forEach(button => {
-                button.addEventListener('click', (e) => {
-                    const id = e.target.dataset.id;
-                    const name = e.target.dataset.name;
-                    const url = e.target.dataset.url;
-                    const category = e.target.dataset.category;
-                    const type = e.target.dataset.type;
-                    openEditModal(id, name, url, category, type);
+            // Attach event listeners for edit and delete buttons only if admin
+            if (adminAuthenticatedSession) {
+                document.querySelectorAll('.edit-button').forEach(button => {
+                    button.addEventListener('click', (e) => {
+                        const id = e.target.dataset.id;
+                        const name = e.target.dataset.name;
+                        const url = e.target.dataset.url;
+                        const category = e.target.dataset.category;
+                        const type = e.target.dataset.type;
+                        openEditModal(id, name, url, category, type);
+                    });
                 });
-            });
 
-            document.querySelectorAll('.delete-button').forEach(button => {
-                button.addEventListener('click', (e) => {
-                    const id = e.target.dataset.id;
-                    currentDeleteDocId = id;
-                    confirmMessage.textContent = `هل تريد حذف الرابط: "${e.target.closest('div.flex.flex-col').querySelector('h3').textContent}" حقًا؟`;
-                    confirmModal.classList.remove('hidden');
+                document.querySelectorAll('.delete-button').forEach(button => {
+                    button.addEventListener('click', (e) => {
+                        const id = e.target.dataset.id;
+                        currentDeleteDocId = id;
+                        confirmMessage.textContent = `هل تريد حذف الرابط: "${e.target.closest('div.flex.flex-col').querySelector('h3').textContent}" حقًا؟`;
+                        confirmModal.classList.remove('hidden');
+                    });
                 });
-            });
+            }
         }
 
         /**
@@ -583,10 +620,10 @@
          */
         async function updateLink() {
             console.log("updateLink called. firebaseInitialized:", firebaseInitialized, "db:", db);
-            if (!firebaseInitialized || !db) {
-                showMessage('الرجاء الانتظار حتى يتم تحميل النظام بالكامل قبل تحديث رابط. يتم إعادة التهيئة تلقائياً.', 'info');
-                console.error("Firebase not ready or db not initialized for update.");
-                 if (!db) { // Only if db object is missing
+            if (!firebaseInitialized || !db || !adminAuthenticatedSession) { // Added adminAuthenticatedSession check
+                showMessage('ليس لديك الصلاحية لتحديث روابط.', 'error');
+                console.error("Firebase not ready or db not initialized or user is not admin for update.");
+                if (!db && !firebaseInitialized) {
                     initializeFirebase();
                 }
                 return;
@@ -648,10 +685,10 @@
          */
         async function deleteLink(docId) {
             console.log("deleteLink called. firebaseInitialized:", firebaseInitialized, "db:", db);
-            if (!firebaseInitialized || !db) {
-                showMessage('الرجاء الانتظار حتى يتم تحميل النظام بالكامل قبل حذف رابط. يتم إعادة التهيئة تلقائياً.', 'info');
-                console.error("Firebase not ready or db not initialized for delete.");
-                 if (!db) { // Only if db object is missing
+            if (!firebaseInitialized || !db || !adminAuthenticatedSession) { // Added adminAuthenticatedSession check
+                showMessage('ليس لديك الصلاحية لحذف روابط.', 'error');
+                console.error("Firebase not ready or db not initialized or user is not admin for delete.");
+                if (!db && !firebaseInitialized) {
                     initializeFirebase();
                 }
                 return;
