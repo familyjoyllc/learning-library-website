@@ -268,6 +268,8 @@
                 const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
                 if (initialAuthToken) {
                     adminAuthenticatedSession = true; // This session is authenticated and thus the admin session.
+                } else {
+                    adminAuthenticatedSession = false; // Not admin if no initial token
                 }
 
                 // If app is already initialized, just ensure listeners are set up
@@ -334,22 +336,23 @@
                     if (user) {
                         userId = user.uid;
                         userIdDisplay.textContent = userId;
-                        // Control visibility and enablement based on admin status
-                        if (adminAuthenticatedSession) {
-                            addLinkSection.style.display = 'block'; // Show for admin
-                            addLinkButton.disabled = false;
-                            addLinkButton.classList.remove('opacity-50', 'cursor-not-allowed');
-                            console.log("Admin privileges granted for this session.");
-                        } else {
-                            addLinkSection.style.display = 'none'; // Hide for non-admin
-                            console.log("User is not the admin for this session.");
-                        }
                     } else {
                         // User is signed out or anonymous.
                         userId = crypto.randomUUID();
                         userIdDisplay.textContent = userId + ' (مجهول)';
-                        addLinkSection.style.display = 'none'; // Always hide for anonymous/signed out
-                        console.log("User is anonymous. Not granting admin privileges.");
+                    }
+
+                    // Now check adminAuthenticatedSession again, as it's the definitive flag
+                    if (adminAuthenticatedSession) {
+                        addLinkSection.style.display = 'block'; // Show for admin
+                        addLinkButton.disabled = false;
+                        addLinkButton.classList.remove('opacity-50', 'cursor-not-allowed');
+                        console.log("Admin privileges granted for this session.");
+                    } else {
+                        addLinkSection.style.display = 'none'; // Hide for non-admin
+                        addLinkButton.disabled = true; // Ensure disabled for non-admin
+                        addLinkButton.classList.add('opacity-50', 'cursor-not-allowed');
+                        console.log("User is not the admin for this session.");
                     }
                     firebaseInitialized = true; // Firebase is ready for use, regardless of admin status
                     console.log("Firebase is fully initialized and UI updated based on admin status.");
@@ -372,9 +375,9 @@
          * Adds a new learning link to Firestore.
          */
         async function addLink() {
-            console.log("addLink called. firebaseInitialized:", firebaseInitialized, "db:", db);
-            if (!firebaseInitialized || !db || !adminAuthenticatedSession) { // Added adminAuthenticatedSession check
-                showMessage('ليس لديك الصلاحية لإضافة روابط.', 'error');
+            console.log("addLink called. firebaseInitialized:", firebaseInitialized, "db:", db, "adminAuthenticatedSession:", adminAuthenticatedSession);
+            if (!firebaseInitialized || !db || !adminAuthenticatedSession) {
+                showMessage('ليس لديك الصلاحية لإضافة روابط أو النظام لم يتم تحميله بالكامل.', 'error');
                 console.error("Firebase not ready or db not initialized or user is not admin for addLink.");
                 // Attempt to re-initialize if not ready
                 if (!db && !firebaseInitialized) {
@@ -620,7 +623,7 @@
          */
         async function updateLink() {
             console.log("updateLink called. firebaseInitialized:", firebaseInitialized, "db:", db);
-            if (!firebaseInitialized || !db || !adminAuthenticatedSession) { // Added adminAuthenticatedSession check
+            if (!firebaseInitialized || !db || !adminAuthenticatedSession) {
                 showMessage('ليس لديك الصلاحية لتحديث روابط.', 'error');
                 console.error("Firebase not ready or db not initialized or user is not admin for update.");
                 if (!db && !firebaseInitialized) {
@@ -685,7 +688,7 @@
          */
         async function deleteLink(docId) {
             console.log("deleteLink called. firebaseInitialized:", firebaseInitialized, "db:", db);
-            if (!firebaseInitialized || !db || !adminAuthenticatedSession) { // Added adminAuthenticatedSession check
+            if (!firebaseInitialized || !db || !adminAuthenticatedSession) {
                 showMessage('ليس لديك الصلاحية لحذف روابط.', 'error');
                 console.error("Firebase not ready or db not initialized or user is not admin for delete.");
                 if (!db && !firebaseInitialized) {
