@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>المكتبة التعليمية</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter Font from Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8f9fa;
+            direction: rtl; /* Set text direction to right-to-left for Arabic */
+        }
+        /* Custom scrollbar for better aesthetics */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+        /* Modal backdrop styling */
+        .modal-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        /* Custom icons for link types using emojis or simple SVG */
+        .icon-youtube::before { content: "▶️ "; }
+        .icon-telegram::before { content: "✈️ "; }
+        .icon-website::before { content: "🌐 "; }
+        .icon-other::before { content: "🔗 "; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center p-4">
+    <header class="w-full max-w-4xl bg-white shadow-lg rounded-2xl p-6 mb-8 text-center">
+        <h1 class="text-4xl font-bold text-gray-800 mb-2">المكتبة التعليمية</h1>
+        <p class="text-lg text-gray-600">اكتشف وشارك أفضل الروابط التعليمية المتنوعة</p>
+    </header>
+
+    <main class="w-full max-w-4xl flex flex-col items-center">
+        <!-- Add New Link Section -->
+        <section class="bg-white shadow-lg rounded-2xl p-6 mb-8 w-full">
+            <h2 class="text-2xl font-semibold text-gray-700 mb-4 text-center">أضف رابطًا تعليميًا جديدًا</h2>
+            <div class="flex flex-col gap-4 mb-4">
+                <input type="text" id="linkNameInput" placeholder="اسم الرابط (مثال: قناة البرمجة للمبتدئين)"
+                       class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-right">
+                <input type="url" id="linkUrlInput" placeholder="الرابط الكامل (مثال: https://www.youtube.com/@channelname أو https://t.me/channelname)"
+                       class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-right">
+                <select id="linkTypeInput"
+                        class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-white">
+                    <option value="youtube">يوتيوب</option>
+                    <option value="telegram">تيليجرام</option>
+                    <option value="website">موقع ويب</option>
+                    <option value="other">أخرى</option>
+                </select>
+                <input type="text" id="categoryInput" placeholder="التصنيف (مثال: برمجة، علوم، لغات)"
+                       class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-right">
+            </div>
+            <button id="addLinkButton"
+                    class="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition duration-300 shadow-md">
+                إضافة رابط
+            </button>
+            <div id="messageBox" class="mt-4 p-3 text-center rounded-lg hidden"></div>
+        </section>
+
+        <!-- Current User ID Display -->
+        <section class="bg-white shadow-lg rounded-2xl p-4 mb-8 w-full text-center">
+            <p class="text-gray-600">معرف المستخدم الحالي: <span id="userIdDisplay" class="font-mono text-blue-600 break-words">جاري التحميل...</span></p>
+        </section>
+
+        <!-- Search and Filter Section -->
+        <section class="bg-white shadow-lg rounded-2xl p-6 mb-8 w-full flex flex-col md:flex-row gap-4">
+            <input type="text" id="searchInput" placeholder="ابحث عن رابط بالاسم أو العنوان..."
+                   class="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-right">
+            <select id="categoryFilter"
+                    class="p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-white">
+                <option value="">جميع التصنيفات</option>
+                <!-- Categories will be populated here -->
+            </select>
+            <select id="typeFilter"
+                    class="p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-white">
+                <option value="">جميع الأنواع</option>
+                <option value="youtube">يوتيوب</option>
+                <option value="telegram">تيليجرام</option>
+                <option value="website">موقع ويب</option>
+                <option value="other">أخرى</option>
+            </select>
+        </section>
+
+        <!-- Links Display Section -->
+        <section class="bg-white shadow-lg rounded-2xl p-6 w-full">
+            <h2 class="text-2xl font-semibold text-gray-700 mb-4 text-center">الروابط التعليمية المضافة</h2>
+            <div id="linksList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Links will be loaded here dynamically -->
+                <p id="loadingMessage" class="text-center text-gray-500 col-span-full">جاري تحميل الروابط...</p>
+            </div>
+            <p id="noLinksMessage" class="text-center text-gray-500 col-span-full hidden">لا توجد روابط مضافة بعد.</p>
+        </section>
+    </main>
+
+    <footer class="w-full max-w-4xl text-center text-gray-500 text-sm mt-8 p-4">
+        &copy; 2024 المكتبة التعليمية. جميع الحقوق محفوظة.
+    </footer>
+
+    <!-- Edit Link Modal -->
+    <div id="editModal" class="modal-backdrop hidden">
+        <div class="bg-white rounded-2xl shadow-xl p-8 w-11/12 md:w-1/2 lg:w-1/3 relative">
+            <h2 class="text-2xl font-semibold text-gray-700 mb-6 text-center">تعديل الرابط</h2>
+            <input type="hidden" id="editLinkId">
+            <div class="flex flex-col gap-4 mb-6">
+                <label for="editLinkName" class="text-gray-700 text-right">اسم الرابط:</label>
+                <input type="text" id="editLinkName" placeholder="اسم الرابط"
+                       class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-right">
+                <label for="editLinkUrl" class="text-gray-700 text-right">الرابط:</label>
+                <input type="url" id="editLinkUrl" placeholder="الرابط"
+                       class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-right">
+                <label for="editLinkType" class="text-gray-700 text-right">النوع:</label>
+                <input type="text" id="editLinkType" class="w-full p-3 border border-gray-300 rounded-lg bg-gray-100 cursor-not-allowed text-right" readonly>
+                <label for="editCategory" class="text-gray-700 text-right">التصنيف:</label>
+                <input type="text" id="editCategory" placeholder="التصنيف"
+                       class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-right">
+            </div>
+            <div class="flex justify-end gap-4">
+                <button id="saveEditButton"
+                        class="bg-blue-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-blue-700 transition duration-300 shadow-md">
+                    حفظ التغييرات
+                </button>
+                <button id="cancelEditButton"
+                        class="bg-gray-300 text-gray-800 px-6 py-2 rounded-lg font-semibold hover:bg-gray-400 transition duration-300 shadow-md">
+                    إلغاء
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div id="confirmModal" class="modal-backdrop hidden">
+        <div class="bg-white rounded-2xl shadow-xl p-8 w-11/12 md:w-1/3 relative text-center">
+            <h2 class="text-2xl font-semibold text-gray-700 mb-6">هل أنت متأكد؟</h2>
+            <p class="text-gray-600 mb-8" id="confirmMessage">هل تريد حذف هذا الرابط حقًا؟</p>
+            <div class="flex justify-center gap-4">
+                <button id="confirmYesButton"
+                        class="bg-red-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-red-700 transition duration-300 shadow-md">
+                    نعم
+                </button>
+                <button id="confirmNoButton"
+                        class="bg-gray-300 text-gray-800 px-6 py-2 rounded-lg font-semibold hover:bg-gray-400 transition duration-300 shadow-md">
+                    لا
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, doc, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firebase configuration and app ID (provided globally by the Canvas environment)
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+
+        // Initialize Firebase
+        let app;
+        let db;
+        let auth;
+        let userId = '';
+        let allLinks = []; // Store all fetched links for client-side filtering
+        const collectionPath = `/artifacts/${appId}/public/data/learningLinks`; // New collection name
+
+        // DOM elements for adding links
+        const linkNameInput = document.getElementById('linkNameInput');
+        const linkUrlInput = document.getElementById('linkUrlInput');
+        const linkTypeInput = document.getElementById('linkTypeInput');
+        const categoryInput = document.getElementById('categoryInput');
+        const addLinkButton = document.getElementById('addLinkButton');
+        const messageBox = document.getElementById('messageBox');
+        const userIdDisplay = document.getElementById('userIdDisplay');
+
+        // DOM elements for displaying links
+        const linksList = document.getElementById('linksList');
+        const loadingMessage = document.getElementById('loadingMessage');
+        const noLinksMessage = document.getElementById('noLinksMessage');
+
+        // DOM elements for search and filter
+        const searchInput = document.getElementById('searchInput');
+        const categoryFilter = document.getElementById('categoryFilter');
+        const typeFilter = document.getElementById('typeFilter');
+
+        // DOM elements for edit modal
+        const editModal = document.getElementById('editModal');
+        const editLinkId = document.getElementById('editLinkId');
+        const editLinkName = document.getElementById('editLinkName');
+        const editLinkUrl = document.getElementById('editLinkUrl');
+        const editLinkType = document.getElementById('editLinkType'); // Display only
+        const editCategory = document.getElementById('editCategory');
+        const saveEditButton = document.getElementById('saveEditButton');
+        const cancelEditButton = document.getElementById('cancelEditButton');
+
+        // DOM elements for confirmation modal
+        const confirmModal = document.getElementById('confirmModal');
+        const confirmMessage = document.getElementById('confirmMessage');
+        const confirmYesButton = document.getElementById('confirmYesButton');
+        const confirmNoButton = document.getElementById('confirmNoButton');
+        let currentDeleteDocId = null; // To store the docId for confirmation
+
+        /**
+         * Displays a message in the message box.
+         * @param {string} message - The message to display.
+         * @param {string} type - The type of message ('success', 'error', 'info').
+         */
+        function showMessage(message, type) {
+            messageBox.textContent = message;
+            messageBox.className = 'mt-4 p-3 text-center rounded-lg'; // Reset classes
+            if (type === 'success') {
+                messageBox.classList.add('bg-green-100', 'text-green-800');
+            } else if (type === 'error') {
+                messageBox.classList.add('bg-red-100', 'text-red-800');
+            } else { // info
+                messageBox.classList.add('bg-blue-100', 'text-blue-800');
+            }
+            messageBox.classList.remove('hidden');
+            setTimeout(() => {
+                messageBox.classList.add('hidden');
+            }, 3000); // Hide after 3 seconds
+        }
+
+        /**
+         * Initializes Firebase and sets up authentication.
+         */
+        async function initializeFirebase() {
+            try {
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                // Authenticate user
+                const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                // Listen for auth state changes to get user ID
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        userIdDisplay.textContent = userId;
+                        setupFirestoreListeners(); // Set up listeners after auth is ready
+                    } else {
+                        // User is signed out or anonymous (if token not provided)
+                        userId = crypto.randomUUID(); // Generate a random ID for anonymous user
+                        userIdDisplay.textContent = userId;
+                        setupFirestoreListeners(); // Set up listeners even for anonymous to access public data
+                    }
+                });
+
+            } catch (error) {
+                console.error("Error initializing Firebase:", error);
+                showMessage(`خطأ في تهيئة فيربيز: ${error.message}`, 'error');
+                userIdDisplay.textContent = 'خطأ في التحميل';
+            }
+        }
+
+        /**
+         * Adds a new learning link to Firestore.
+         */
+        async function addLink() {
+            const linkName = linkNameInput.value.trim();
+            const linkUrl = linkUrlInput.value.trim();
+            const linkType = linkTypeInput.value;
+            const category = categoryInput.value.trim();
+
+            if (!linkName || !linkUrl) {
+                showMessage('الرجاء إدخال اسم الرابط وعنوانه.', 'error');
+                return;
+            }
+
+            // Enhanced URL validation based on type
+            let isValidUrl = false;
+            switch (linkType) {
+                case 'youtube':
+                    const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+$/i;
+                    isValidUrl = youtubeRegex.test(linkUrl);
+                    if (!isValidUrl) showMessage('الرجاء إدخال رابط يوتيوب صالح.', 'error');
+                    break;
+                case 'telegram':
+                    const telegramRegex = /^(https?:\/\/)?(www\.)?t\.me\/.+$/i;
+                    isValidUrl = telegramRegex.test(linkUrl);
+                    if (!isValidUrl) showMessage('الرجاء إدخال رابط تيليجرام صالح (مثال: https://t.me/channelname).', 'error');
+                    break;
+                case 'website':
+                case 'other':
+                    // Basic URL validation for general websites
+                    const urlRegex = /^(https?|ftp):\/\/[^\s/$.?#].[^\s]*$/i;
+                    isValidUrl = urlRegex.test(linkUrl);
+                    if (!isValidUrl) showMessage('الرجاء إدخال رابط ويب صالح (يجب أن يبدأ بـ http:// أو https://).', 'error');
+                    break;
+                default:
+                    showMessage('نوع الرابط غير صالح.', 'error');
+                    return; // Exit if linkType is invalid
+            }
+
+            if (!isValidUrl) return;
+
+            try {
+                await addDoc(collection(db, collectionPath), {
+                    name: linkName,
+                    url: linkUrl,
+                    type: linkType, // Store the type
+                    category: category || 'عام', // Default category if not provided
+                    createdAt: new Date() // Add a timestamp
+                });
+                showMessage('تمت إضافة الرابط بنجاح!', 'success');
+                linkNameInput.value = '';
+                linkUrlInput.value = '';
+                categoryInput.value = '';
+                linkTypeInput.value = 'youtube'; // Reset to default
+            } catch (e) {
+                console.error("Error adding document: ", e);
+                showMessage(`خطأ في إضافة الرابط: ${e.message}`, 'error');
+            }
+        }
+
+        /**
+         * Renders the list of links based on the provided array.
+         * @param {Array} linksToRender - The array of link objects to display.
+         */
+        function renderLinks(linksToRender) {
+            linksList.innerHTML = ''; // Clear existing links
+            loadingMessage.classList.add('hidden'); // Hide loading message
+
+            if (linksToRender.length === 0) {
+                noLinksMessage.classList.remove('hidden'); // Show no links message
+                return;
+            } else {
+                noLinksMessage.classList.add('hidden'); // Hide no links message
+            }
+
+            linksToRender.forEach((link) => {
+                const linkElement = document.createElement('div');
+                linkElement.className = 'bg-gray-50 p-4 rounded-xl shadow-sm flex flex-col items-center text-center';
+
+                let typeLabel = '';
+                let typeClass = '';
+                switch(link.type) {
+                    case 'youtube': typeLabel = 'يوتيوب'; typeClass = 'icon-youtube'; break;
+                    case 'telegram': typeLabel = 'تيليجرام'; typeClass = 'icon-telegram'; break;
+                    case 'website': typeLabel = 'موقع ويب'; typeClass = 'icon-website'; break;
+                    case 'other': typeLabel = 'أخرى'; typeClass = 'icon-other'; break;
+                    default: typeLabel = 'غير معروف'; typeClass = ''; break;
+                }
+
+                linkElement.innerHTML = `
+                    <h3 class="text-xl font-medium text-gray-800 mb-1 ${typeClass}">${link.name}</h3>
+                    <p class="text-gray-500 text-sm mb-2">التصنيف: ${link.category || 'غير مصنف'}</p>
+                    <p class="text-gray-600 text-sm mb-4 break-all">${link.url}</p>
+                    <div class="flex gap-2">
+                        <a href="${link.url}" target="_blank" rel="noopener noreferrer"
+                           class="inline-block bg-green-500 text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-green-600 transition duration-300 shadow-md">
+                            مشاهدة
+                        </a>
+                        <button data-id="${link.id}" data-name="${link.name}" data-url="${link.url}" data-category="${link.category || ''}" data-type="${link.type}"
+                                class="edit-button bg-yellow-500 text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-yellow-600 transition duration-300 shadow-md">
+                            تعديل
+                        </button>
+                        <button data-id="${link.id}"
+                                class="delete-button bg-red-500 text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-red-600 transition duration-300 shadow-md">
+                            حذف
+                        </button>
+                    </div>
+                `;
+                linksList.appendChild(linkElement);
+            });
+
+            // Attach event listeners for edit and delete buttons after rendering
+            document.querySelectorAll('.edit-button').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const id = e.target.dataset.id;
+                    const name = e.target.dataset.name;
+                    const url = e.target.dataset.url;
+                    const category = e.target.dataset.category;
+                    const type = e.target.dataset.type;
+                    openEditModal(id, name, url, category, type);
+                });
+            });
+
+            document.querySelectorAll('.delete-button').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const id = e.target.dataset.id;
+                    currentDeleteDocId = id; // Store ID for confirmation
+                    confirmMessage.textContent = `هل تريد حذف الرابط: "${e.target.closest('div.flex.flex-col').querySelector('h3').textContent}" حقًا؟`;
+                    confirmModal.classList.remove('hidden');
+                });
+            });
+        }
+
+        /**
+         * Applies search and filters to the links and re-renders them.
+         */
+        function applyFiltersAndSearch() {
+            const searchText = searchInput.value.toLowerCase();
+            const selectedCategory = categoryFilter.value;
+            const selectedType = typeFilter.value;
+
+            let filteredLinks = allLinks.filter(link => {
+                const matchesSearch = link.name.toLowerCase().includes(searchText) ||
+                                      link.url.toLowerCase().includes(searchText);
+                const matchesCategory = selectedCategory === '' ||
+                                        (link.category && link.category.toLowerCase() === selectedCategory.toLowerCase());
+                const matchesType = selectedType === '' ||
+                                    (link.type && link.type.toLowerCase() === selectedType.toLowerCase());
+                return matchesSearch && matchesCategory && matchesType;
+            });
+            renderLinks(filteredLinks);
+        }
+
+        /**
+         * Populates the category filter dropdown with unique categories.
+         */
+        function populateCategoryFilter() {
+            const categories = new Set();
+            allLinks.forEach(link => {
+                if (link.category) {
+                    categories.add(link.category);
+                }
+            });
+
+            categoryFilter.innerHTML = '<option value="">جميع التصنيفات</option>'; // Reset
+            categories.forEach(cat => {
+                const option = document.createElement('option');
+                option.value = cat;
+                option.textContent = cat;
+                categoryFilter.appendChild(option);
+            });
+        }
+
+        /**
+         * Sets up real-time listener for learning links from Firestore.
+         */
+        function setupFirestoreListeners() {
+            if (!db) {
+                console.error("Firestore not initialized.");
+                return;
+            }
+
+            const q = query(collection(db, collectionPath));
+
+            onSnapshot(q, (snapshot) => {
+                allLinks = []; // Clear and repopulate allLinks
+                snapshot.forEach((doc) => {
+                    allLinks.push({ id: doc.id, ...doc.data() });
+                });
+                populateCategoryFilter(); // Update category filter options
+                applyFiltersAndSearch(); // Re-render with current filters
+            }, (error) => {
+                console.error("Error listening to links:", error);
+                showMessage(`خطأ في جلب الروابط: ${error.message}`, 'error');
+                loadingMessage.textContent = 'فشل تحميل الروابط.';
+                loadingMessage.classList.remove('hidden');
+                noLinksMessage.classList.add('hidden');
+            });
+        }
+
+        /**
+         * Opens the edit modal with the provided link data.
+         * @param {string} id - The document ID of the link.
+         * @param {string} name - The current name of the link.
+         * @param {string} url - The current URL of the link.
+         * @param {string} category - The current category of the link.
+         * @param {string} type - The current type of the link.
+         */
+        function openEditModal(id, name, url, category, type) {
+            editLinkId.value = id;
+            editLinkName.value = name;
+            editLinkUrl.value = url;
+            editCategory.value = category;
+            editLinkType.value = type; // Display type but don't allow editing for simplicity
+            editModal.classList.remove('hidden');
+        }
+
+        /**
+         * Closes the edit modal.
+         */
+        function closeEditModal() {
+            editModal.classList.add('hidden');
+        }
+
+        /**
+         * Updates a link in Firestore with new data from the edit modal.
+         */
+        async function updateLink() {
+            const id = editLinkId.value;
+            const newName = editLinkName.value.trim();
+            const newUrl = editLinkUrl.value.trim();
+            const newCategory = editCategory.value.trim();
+            const linkType = editLinkType.value; // Get the original type for validation
+
+            if (!newName || !newUrl) {
+                showMessage('الرجاء إدخال اسم الرابط وعنوانه للتعديل.', 'error');
+                return;
+            }
+
+            // Re-validate URL based on original type
+            let isValidUrl = false;
+            switch (linkType) {
+                case 'youtube':
+                    const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+$/i;
+                    isValidUrl = youtubeRegex.test(newUrl);
+                    if (!isValidUrl) showMessage('الرجاء إدخال رابط يوتيوب صالح.', 'error');
+                    break;
+                case 'telegram':
+                    const telegramRegex = /^(https?:\/\/)?(www\.)?t\.me\/.+$/i;
+                    isValidUrl = telegramRegex.test(newUrl);
+                    if (!isValidUrl) showMessage('الرجاء إدخال رابط تيليجرام صالح.', 'error');
+                    break;
+                case 'website':
+                case 'other':
+                    const urlRegex = /^(https?|ftp):\/\/[^\s/$.?#].[^\s]*$/i;
+                    isValidUrl = urlRegex.test(newUrl);
+                    if (!isValidUrl) showMessage('الرجاء إدخال رابط ويب صالح.', 'error');
+                    break;
+                default:
+                    isValidUrl = true; // Should not happen if type is valid
+            }
+
+            if (!isValidUrl) return;
+
+            try {
+                await updateDoc(doc(db, collectionPath, id), {
+                    name: newName,
+                    url: newUrl,
+                    category: newCategory || 'عام',
+                    updatedAt: new Date()
+                });
+                showMessage('تم تحديث الرابط بنجاح!', 'success');
+                closeEditModal();
+            } catch (e) {
+                console.error("Error updating document: ", e);
+                showMessage(`خطأ في تحديث الرابط: ${e.message}`, 'error');
+            }
+        }
+
+        /**
+         * Deletes a link from Firestore.
+         * @param {string} docId - The document ID of the link to delete.
+         */
+        async function deleteLink(docId) {
+            try {
+                await deleteDoc(doc(db, collectionPath, docId));
+                showMessage('تم حذف الرابط بنجاح!', 'success');
+            } catch (e) {
+                console.error("Error deleting document: ", e);
+                showMessage(`خطأ في حذف الرابط: ${e.message}`, 'error');
+            }
+        }
+
+        // Event Listeners
+        addLinkButton.addEventListener('click', addLink);
+        searchInput.addEventListener('input', applyFiltersAndSearch);
+        categoryFilter.addEventListener('change', applyFiltersAndSearch);
+        typeFilter.addEventListener('change', applyFiltersAndSearch); // New filter for type
+
+        // Edit Modal Event Listeners
+        saveEditButton.addEventListener('click', updateLink);
+        cancelEditButton.addEventListener('click', closeEditModal);
+        editModal.addEventListener('click', (e) => { // Close modal when clicking outside content
+            if (e.target === editModal) {
+                closeEditModal();
+            }
+        });
+
+        // Confirmation Modal Event Listeners
+        confirmYesButton.addEventListener('click', () => {
+            if (currentDeleteDocId) {
+                deleteLink(currentDeleteDocId);
+                currentDeleteDocId = null; // Reset
+            }
+            confirmModal.classList.add('hidden');
+        });
+        confirmNoButton.addEventListener('click', () => {
+            currentDeleteDocId = null; // Reset
+            confirmModal.classList.add('hidden');
+        });
+
+        // Initialize Firebase when the window loads
+        window.onload = initializeFirebase;
+
+        /*
+         * ملاحظة حول دمج واجهة برمجة تطبيقات YouTube/Telegram/Website (API):
+         *
+         * جلب البيانات تلقائيًا (مثل عدد المشتركين، الوصف، أو معلومات الموقع) من واجهات برمجة التطبيقات
+         * الخاصة بيوتيوب، تيليجرام، أو أي موقع آخر مباشرةً من تطبيق العميل (مثل ملف HTML هذا)
+         * لا يُنصح به عادةً بسبب المخاوف الأمنية (كشف مفتاح API الخاص بك) وسياسات
+         * مشاركة الموارد عبر النطاقات (CORS).
+         *
+         * الإعداد النموذجي لذلك يتضمن استخدام خادم خلفي صغير (مثل Node.js، Python)
+         * يحتفظ بمفتاح API ويقوم بإجراء المكالمات إلى واجهة برمجة التطبيقات الخارجية.
+         * سيقوم تطبيق الواجهة الأمامية بإرسال طلب إلى هذا الخادم الخلفي، والذي بدوره
+         * يستدعي واجهة برمجة التطبيقات، ثم يعيد البيانات إلى تطبيق العميل.
+         * هذا يحمي مفتاح API ويتجاوز مشكلات CORS.
+         */
+    </script>
+</body>
+</html>
