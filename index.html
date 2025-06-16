@@ -75,7 +75,7 @@
                        class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-right">
             </div>
             <button id="addLinkButton"
-                    class="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition duration-300 shadow-md">
+                    class="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition duration-300 shadow-md opacity-50 cursor-not-allowed" disabled>
                 إضافة رابط
             </button>
             <div id="messageBox" class="mt-4 p-3 text-center rounded-lg hidden"></div>
@@ -184,6 +184,7 @@
         let db;
         let auth;
         let userId = '';
+        let firebaseInitialized = false; // New flag to track full Firebase initialization
         let allLinks = []; // Store all fetched links for client-side filtering
         const collectionPath = `/artifacts/${appId}/public/data/learningLinks`; // New collection name
 
@@ -253,25 +254,38 @@
                 db = getFirestore(app);
                 auth = getAuth(app);
 
-                // Authenticate user
+                // Initially disable button
+                addLinkButton.disabled = true;
+                addLinkButton.classList.add('opacity-50', 'cursor-not-allowed');
+                userIdDisplay.textContent = 'جاري التحميل...'; // Set loading state for user ID
+
                 const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+                // Sign in first
                 if (initialAuthToken) {
                     await signInWithCustomToken(auth, initialAuthToken);
                 } else {
                     await signInAnonymously(auth);
                 }
 
-                // Listen for auth state changes to get user ID
+                // Now, listen for auth state changes. This will fire immediately after sign-in.
                 onAuthStateChanged(auth, (user) => {
                     if (user) {
                         userId = user.uid;
                         userIdDisplay.textContent = userId;
+                        firebaseInitialized = true; // Firebase is ready
+                        addLinkButton.disabled = false; // Enable button
+                        addLinkButton.classList.remove('opacity-50', 'cursor-not-allowed');
                         setupFirestoreListeners(); // Set up listeners after auth is ready
                     } else {
-                        // User is signed out or anonymous (if token not provided)
-                        userId = crypto.randomUUID(); // Generate a random ID for anonymous user
-                        userIdDisplay.textContent = userId;
-                        setupFirestoreListeners(); // Set up listeners even for anonymous to access public data
+                        // This state might occur if sign-in fails or user signs out.
+                        // For this app, we'll assign a random ID if no user is found after attempting sign-in.
+                        userId = crypto.randomUUID();
+                        userIdDisplay.textContent = userId + ' (مجهول)'; // Indicate anonymous
+                        firebaseInitialized = true; // Still ready for public data
+                        addLinkButton.disabled = false; // Enable button
+                        addLinkButton.classList.remove('opacity-50', 'cursor-not-allowed');
+                        setupFirestoreListeners();
                     }
                 });
 
@@ -279,6 +293,7 @@
                 console.error("Error initializing Firebase:", error);
                 showMessage(`خطأ في تهيئة فيربيز: ${error.message}`, 'error');
                 userIdDisplay.textContent = 'خطأ في التحميل';
+                firebaseInitialized = false; // Ensure flag is false on error
             }
         }
 
@@ -286,6 +301,13 @@
          * Adds a new learning link to Firestore.
          */
         async function addLink() {
+            // Check if Firebase is fully initialized before attempting Firestore ops
+            if (!firebaseInitialized || !db) {
+                showMessage('الرجاء الانتظار حتى يتم تحميل النظام بالكامل قبل إضافة رابط.', 'info');
+                console.error("Firebase not ready or db not initialized.");
+                return;
+            }
+
             const linkName = linkNameInput.value.trim();
             const linkUrl = linkUrlInput.value.trim();
             const linkType = linkTypeInput.value;
@@ -460,7 +482,7 @@
          */
         function setupFirestoreListeners() {
             if (!db) {
-                console.error("Firestore not initialized.");
+                console.error("Firestore not initialized for listeners. Cannot set up snapshot listener.");
                 return;
             }
 
@@ -510,6 +532,13 @@
          * Updates a link in Firestore with new data from the edit modal.
          */
         async function updateLink() {
+            // Check if Firebase is fully initialized before attempting Firestore ops
+            if (!firebaseInitialized || !db) {
+                showMessage('الرجاء الانتظار حتى يتم تحميل النظام بالكامل قبل تحديث رابط.', 'info');
+                console.error("Firebase not ready or db not initialized for update.");
+                return;
+            }
+
             const id = editLinkId.value;
             const newName = editLinkName.value.trim();
             const newUrl = editLinkUrl.value.trim();
@@ -566,6 +595,13 @@
          * @param {string} docId - The document ID of the link to delete.
          */
         async function deleteLink(docId) {
+            // Check if Firebase is fully initialized before attempting Firestore ops
+            if (!firebaseInitialized || !db) {
+                showMessage('الرجاء الانتظار حتى يتم تحميل النظام بالكامل قبل حذف رابط.', 'info');
+                console.error("Firebase not ready or db not initialized for delete.");
+                return;
+            }
+
             try {
                 await deleteDoc(doc(db, collectionPath, docId));
                 showMessage('تم حذف الرابط بنجاح!', 'success');
