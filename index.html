@@ -57,7 +57,7 @@
 
     <main class="w-full max-w-4xl flex flex-col items-center">
         <!-- Add New Link Section -->
-        <section id="addLinkSection" class="bg-white shadow-lg rounded-2xl p-6 mb-8 w-full">
+        <section id="addLinkSection" class="bg-white shadow-lg rounded-2xl p-6 mb-8 w-full" style="display: none;">
             <h2 class="text-2xl font-semibold text-gray-700 mb-4 text-center">أضف رابطًا تعليميًا جديدًا</h2>
             <div class="flex flex-col gap-4 mb-4">
                 <input type="text" id="linkNameInput" placeholder="اسم الرابط (مثال: قناة البرمجة للمبتدئين)"
@@ -84,6 +84,7 @@
         <!-- Current User ID Display -->
         <section class="bg-white shadow-lg rounded-2xl p-4 mb-8 w-full text-center">
             <p class="text-gray-600">معرف المستخدم الحالي: <span id="userIdDisplay" class="font-mono text-blue-600 break-words">جاري التحميل...</span></p>
+            <p class="text-sm text-gray-500 mt-2">حالة Firebase: <span id="firebaseStatus" class="font-bold text-blue-500">جاري التهيئة...</span></p>
         </section>
 
         <!-- Search and Filter Section -->
@@ -131,7 +132,7 @@
                        class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-right">
                 <label for="editLinkUrl" class="text-gray-700 text-right">الرابط:</label>
                 <input type="url" id="editLinkUrl" placeholder="الرابط"
-                       class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-right">
+                       class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-500 text-right">
                 <label for="editLinkType" class="text-gray-700 text-right">النوع:</label>
                 <input type="text" id="editLinkType" class="w-full p-3 border border-gray-300 rounded-lg bg-gray-100 cursor-not-allowed text-right" readonly>
                 <label for="editCategory" class="text-gray-700 text-right">التصنيف:</label>
@@ -198,6 +199,7 @@
         const messageBox = document.getElementById('messageBox');
         const userIdDisplay = document.getElementById('userIdDisplay');
         const addLinkSection = document.getElementById('addLinkSection'); // Reference to the add link section
+        const firebaseStatusDisplay = document.getElementById('firebaseStatus'); // New status display
 
         // DOM elements for displaying links
         const linksList = document.getElementById('linksList');
@@ -248,17 +250,30 @@
         }
 
         /**
+         * Updates the Firebase status display message.
+         * @param {string} message - The status message.
+         * @param {string} colorClass - Tailwind CSS text color class (e.g., 'text-green-500').
+         */
+        function updateFirebaseStatus(message, colorClass) {
+            firebaseStatusDisplay.textContent = message;
+            firebaseStatusDisplay.className = `font-bold ${colorClass}`;
+        }
+
+        /**
          * Initializes Firebase and sets up authentication.
          * Attempts to re-initialize if an error occurs.
          */
         async function initializeFirebase() {
             console.log("Initializing Firebase...");
+            updateFirebaseStatus('جاري التهيئة...', 'text-blue-500');
+
             try {
                 // Ensure firebaseConfig is valid
                 if (Object.keys(firebaseConfig).length === 0) {
                     console.error("Firebase config is empty or invalid.");
                     showMessage('خطأ: لم يتم تهيئة إعدادات فيربيز بشكل صحيح. حاول إعادة التحميل.', 'error');
                     userIdDisplay.textContent = 'خطأ في التهيئة';
+                    updateFirebaseStatus('خطأ في الإعدادات', 'text-red-500');
                     // Schedule a retry after a delay
                     setTimeout(initializeFirebase, 5000); // Retry after 5 seconds
                     return; // Stop initialization if config is bad
@@ -266,52 +281,24 @@
 
                 // Determine if this session is authenticated via initial token
                 const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-                if (initialAuthToken) {
-                    adminAuthenticatedSession = true; // This session is authenticated and thus the admin session.
+                adminAuthenticatedSession = !!initialAuthToken; // Set admin flag based on token presence
+
+                // If app is already initialized, skip re-initializing app, db, auth
+                if (!app) {
+                    app = initializeApp(firebaseConfig);
+                    db = getFirestore(app);
+                    auth = getAuth(app);
+                    console.log("Firebase app, db, auth initialized.");
+                    console.log("db object right after assignment:", db);
                 } else {
-                    adminAuthenticatedSession = false; // Not admin if no initial token
+                    console.log("Firebase app already initialized. Reusing existing instances.");
                 }
 
-                // If app is already initialized, just ensure listeners are set up
-                if (app) {
-                    console.log("Firebase app already initialized. Proceeding with auth check and listeners.");
-                    onAuthStateChanged(auth, (user) => {
-                        console.log("onAuthStateChanged fired (re-init path). User:", user);
-                        if (user) {
-                            userId = user.uid;
-                            userIdDisplay.textContent = userId;
-                        } else {
-                            userId = crypto.randomUUID();
-                            userIdDisplay.textContent = userId + ' (مجهول)';
-                        }
-                        firebaseInitialized = true;
-                        // Control visibility and enablement based on admin status
-                        if (adminAuthenticatedSession) {
-                            addLinkSection.style.display = 'block';
-                            addLinkButton.disabled = false;
-                            addLinkButton.classList.remove('opacity-50', 'cursor-not-allowed');
-                            console.log("Admin privileges granted for this session (re-init path).");
-                        } else {
-                            addLinkSection.style.display = 'none'; // Hide for non-admin
-                            console.log("User is not admin for this session (re-init path).");
-                        }
-                        console.log("Firebase is fully initialized and UI updated based on admin status (re-init path).");
-                        setupFirestoreListeners();
-                    });
-                    return;
-                }
-
-                app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
-                auth = getAuth(app);
-
-                console.log("Firebase app, db, auth initialized.");
-                console.log("db object right after assignment:", db);
-
-                // Initially hide the add link section and disable the button
+                // Ensure addLinkSection is hidden initially and button disabled
                 addLinkButton.disabled = true;
                 addLinkButton.classList.add('opacity-50', 'cursor-not-allowed');
-                addLinkSection.style.display = 'none'; // Hide by default
+                addLinkSection.style.display = 'none'; // Ensure hidden by default
+
                 userIdDisplay.textContent = 'جاري التحميل...';
                 loadingMessage.textContent = 'جاري تحميل الروابط...'; // Reset loading message
 
@@ -328,31 +315,34 @@
                     console.error("Authentication error:", authError);
                     showMessage(`خطأ في المصادقة: ${authError.message}. سيتم المحاولة مرة أخرى.`, 'error');
                     userIdDisplay.textContent = 'خطأ في المصادقة';
-                    // Don't return, let onAuthStateChanged handle the final state.
+                    updateFirebaseStatus('خطأ في المصادقة', 'text-red-500');
+                    // Do not return, let onAuthStateChanged handle final state.
                 }
 
+                // onAuthStateChanged will fire once after sign-in attempt completes
                 onAuthStateChanged(auth, (user) => {
                     console.log("onAuthStateChanged fired. User:", user);
                     if (user) {
                         userId = user.uid;
                         userIdDisplay.textContent = userId;
                     } else {
-                        // User is signed out or anonymous.
                         userId = crypto.randomUUID();
                         userIdDisplay.textContent = userId + ' (مجهول)';
                     }
 
-                    // Now check adminAuthenticatedSession again, as it's the definitive flag
+                    // Update UI based on admin status
                     if (adminAuthenticatedSession) {
                         addLinkSection.style.display = 'block'; // Show for admin
                         addLinkButton.disabled = false;
                         addLinkButton.classList.remove('opacity-50', 'cursor-not-allowed');
                         console.log("Admin privileges granted for this session.");
+                        updateFirebaseStatus('جاهز (مسؤول)', 'text-green-500');
                     } else {
                         addLinkSection.style.display = 'none'; // Hide for non-admin
                         addLinkButton.disabled = true; // Ensure disabled for non-admin
                         addLinkButton.classList.add('opacity-50', 'cursor-not-allowed');
                         console.log("User is not the admin for this session.");
+                        updateFirebaseStatus('جاهز (مشاهد فقط)', 'text-green-500');
                     }
                     firebaseInitialized = true; // Firebase is ready for use, regardless of admin status
                     console.log("Firebase is fully initialized and UI updated based on admin status.");
@@ -363,6 +353,7 @@
                 console.error("Error during Firebase initialization process:", error);
                 showMessage(`خطأ في تهيئة فيربيز: ${error.message}. سيتم المحاولة مرة أخرى.`, 'error');
                 userIdDisplay.textContent = 'خطأ في التهيئة';
+                updateFirebaseStatus('خطأ في التهيئة', 'text-red-500');
                 firebaseInitialized = false;
                 addLinkButton.disabled = true; // Keep disabled on error
                 addLinkButton.classList.add('opacity-50', 'cursor-not-allowed');
@@ -379,7 +370,7 @@
             if (!firebaseInitialized || !db || !adminAuthenticatedSession) {
                 showMessage('ليس لديك الصلاحية لإضافة روابط أو النظام لم يتم تحميله بالكامل.', 'error');
                 console.error("Firebase not ready or db not initialized or user is not admin for addLink.");
-                // Attempt to re-initialize if not ready
+                // Attempt to re-initialize if not ready and db is truly missing
                 if (!db && !firebaseInitialized) {
                     initializeFirebase();
                 }
