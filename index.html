@@ -213,7 +213,7 @@
         const editLinkName = document.getElementById('editLinkName');
         const editLinkUrl = document.getElementById('editLinkUrl');
         const editLinkType = document.getElementById('editLinkType'); // Display only
-        const editCategory = document.getElementById('editCategory');
+        const editCategory = document.getElementById('editCategory'); // Corrected line
         const saveEditButton = document.getElementById('saveEditButton');
         const cancelEditButton = document.getElementById('cancelEditButton');
 
@@ -247,6 +247,7 @@
 
         /**
          * Initializes Firebase and sets up authentication.
+         * Attempts to re-initialize if an error occurs.
          */
         async function initializeFirebase() {
             console.log("Initializing Firebase...");
@@ -254,9 +255,33 @@
                 // Ensure firebaseConfig is valid
                 if (Object.keys(firebaseConfig).length === 0) {
                     console.error("Firebase config is empty or invalid.");
-                    showMessage('خطأ: لم يتم تهيئة إعدادات فيربيز بشكل صحيح.', 'error');
+                    showMessage('خطأ: لم يتم تهيئة إعدادات فيربيز بشكل صحيح. حاول إعادة التحميل.', 'error');
                     userIdDisplay.textContent = 'خطأ في التهيئة';
+                    // Schedule a retry after a delay
+                    setTimeout(initializeFirebase, 5000); // Retry after 5 seconds
                     return; // Stop initialization if config is bad
+                }
+
+                // If app is already initialized, just ensure listeners are set up
+                if (app) {
+                    console.log("Firebase app already initialized. Proceeding with auth check and listeners.");
+                    // Directly proceed to auth state check to re-confirm user and setup listeners
+                    onAuthStateChanged(auth, (user) => {
+                        console.log("onAuthStateChanged fired (re-init path). User:", user);
+                        if (user) {
+                            userId = user.uid;
+                            userIdDisplay.textContent = userId;
+                        } else {
+                            userId = crypto.randomUUID();
+                            userIdDisplay.textContent = userId + ' (مجهول)';
+                        }
+                        firebaseInitialized = true;
+                        addLinkButton.disabled = false;
+                        addLinkButton.classList.remove('opacity-50', 'cursor-not-allowed');
+                        console.log("Firebase is fully initialized and UI enabled (re-init path).");
+                        setupFirestoreListeners();
+                    });
+                    return;
                 }
 
                 app = initializeApp(firebaseConfig);
@@ -264,48 +289,56 @@
                 auth = getAuth(app);
 
                 console.log("Firebase app, db, auth initialized.");
-                console.log("db object right after assignment:", db); // Check db right after assignment
+                console.log("db object right after assignment:", db);
 
-                // Initially disable button
                 addLinkButton.disabled = true;
                 addLinkButton.classList.add('opacity-50', 'cursor-not-allowed');
                 userIdDisplay.textContent = 'جاري التحميل...';
+                loadingMessage.textContent = 'جاري تحميل الروابط...'; // Reset loading message
 
                 const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
-                // Attempt to sign in
-                if (initialAuthToken) {
-                    console.log("Signing in with custom token...");
-                    await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    console.log("Signing in anonymously...");
-                    await signInAnonymously(auth);
+                try {
+                    if (initialAuthToken) {
+                        console.log("Signing in with custom token...");
+                        await signInWithCustomToken(auth, initialAuthToken);
+                    } else {
+                        console.log("Signing in anonymously...");
+                        await signInAnonymously(auth);
+                    }
+                    console.log("Sign-in attempt completed.");
+                } catch (authError) {
+                    console.error("Authentication error:", authError);
+                    showMessage(`خطأ في المصادقة: ${authError.message}. سيتم المحاولة مرة أخرى.`, 'error');
+                    userIdDisplay.textContent = 'خطأ في المصادقة';
+                    // Don't return, let onAuthStateChanged handle the final state.
                 }
-                console.log("Sign-in attempt completed.");
 
-                // Listen for auth state changes. This will fire once immediately after sign-in attempt
                 onAuthStateChanged(auth, (user) => {
                     console.log("onAuthStateChanged fired. User:", user);
                     if (user) {
                         userId = user.uid;
                         userIdDisplay.textContent = userId;
                     } else {
-                        userId = crypto.randomUUID(); // Fallback for anonymous
-                        userIdDisplay.textContent = userId + ' (مجهول)'; // Indicate anonymous
+                        userId = crypto.randomUUID();
+                        userIdDisplay.textContent = userId + ' (مجهول)';
                     }
-                    // Now Firebase (db and auth) is ready and user ID is known
                     firebaseInitialized = true;
-                    addLinkButton.disabled = false; // Enable button
+                    addLinkButton.disabled = false;
                     addLinkButton.classList.remove('opacity-50', 'cursor-not-allowed');
                     console.log("Firebase is fully initialized and UI enabled.");
-                    setupFirestoreListeners(); // Setup listeners *only* when ready
+                    setupFirestoreListeners();
                 });
 
             } catch (error) {
                 console.error("Error during Firebase initialization process:", error);
-                showMessage(`خطأ في تهيئة فيربيز: ${error.message}`, 'error');
-                userIdDisplay.textContent = 'خطأ في التحميل';
-                firebaseInitialized = false; // Ensure flag is false on error
+                showMessage(`خطأ في تهيئة فيربيز: ${error.message}. سيتم المحاولة مرة أخرى.`, 'error');
+                userIdDisplay.textContent = 'خطأ في التهيئة';
+                firebaseInitialized = false;
+                addLinkButton.disabled = true; // Keep disabled on error
+                addLinkButton.classList.add('opacity-50', 'cursor-not-allowed');
+                // Schedule a retry after a delay
+                setTimeout(initializeFirebase, 5000); // Retry after 5 seconds
             }
         }
 
@@ -313,11 +346,14 @@
          * Adds a new learning link to Firestore.
          */
         async function addLink() {
-            console.log("addLink called. firebaseInitialized:", firebaseInitialized, "db:", db); // Log at start of function
-            // Check if Firebase is fully initialized before attempting Firestore ops
+            console.log("addLink called. firebaseInitialized:", firebaseInitialized, "db:", db);
             if (!firebaseInitialized || !db) {
-                showMessage('الرجاء الانتظار حتى يتم تحميل النظام بالكامل قبل إضافة رابط.', 'info');
+                showMessage('الرجاء الانتظار حتى يتم تحميل النظام بالكامل قبل إضافة رابط. يتم إعادة التهيئة تلقائياً.', 'info');
                 console.error("Firebase not ready or db not initialized for addLink.");
+                // Attempt to re-initialize if not ready
+                if (!db) { // Only if db object is missing
+                    initializeFirebase();
+                }
                 return;
             }
 
@@ -331,7 +367,6 @@
                 return;
             }
 
-            // Enhanced URL validation based on type
             let isValidUrl = false;
             switch (linkType) {
                 case 'youtube':
@@ -346,14 +381,13 @@
                     break;
                 case 'website':
                 case 'other':
-                    // Basic URL validation for general websites
                     const urlRegex = /^(https?|ftp):\/\/[^\s/$.?#].[^\s]*$/i;
                     isValidUrl = urlRegex.test(linkUrl);
                     if (!isValidUrl) showMessage('الرجاء إدخال رابط ويب صالح (يجب أن يبدأ بـ http:// أو https://).', 'error');
                     break;
                 default:
                     showMessage('نوع الرابط غير صالح.', 'error');
-                    return; // Exit if linkType is invalid
+                    return;
             }
 
             if (!isValidUrl) return;
@@ -362,15 +396,15 @@
                 await addDoc(collection(db, collectionPath), {
                     name: linkName,
                     url: linkUrl,
-                    type: linkType, // Store the type
-                    category: category || 'عام', // Default category if not provided
-                    createdAt: new Date() // Add a timestamp
+                    type: linkType,
+                    category: category || 'عام',
+                    createdAt: new Date()
                 });
                 showMessage('تمت إضافة الرابط بنجاح!', 'success');
                 linkNameInput.value = '';
                 linkUrlInput.value = '';
                 categoryInput.value = '';
-                linkTypeInput.value = 'youtube'; // Reset to default
+                linkTypeInput.value = 'youtube';
             } catch (e) {
                 console.error("Error adding document: ", e);
                 showMessage(`خطأ في إضافة الرابط: ${e.message}`, 'error');
@@ -382,14 +416,14 @@
          * @param {Array} linksToRender - The array of link objects to display.
          */
         function renderLinks(linksToRender) {
-            linksList.innerHTML = ''; // Clear existing links
-            loadingMessage.classList.add('hidden'); // Hide loading message
+            linksList.innerHTML = '';
+            loadingMessage.classList.add('hidden');
 
             if (linksToRender.length === 0) {
-                noLinksMessage.classList.remove('hidden'); // Show no links message
+                noLinksMessage.classList.remove('hidden');
                 return;
             } else {
-                noLinksMessage.classList.add('hidden'); // Hide no links message
+                noLinksMessage.classList.add('hidden');
             }
 
             linksToRender.forEach((link) => {
@@ -428,7 +462,6 @@
                 linksList.appendChild(linkElement);
             });
 
-            // Attach event listeners for edit and delete buttons after rendering
             document.querySelectorAll('.edit-button').forEach(button => {
                 button.addEventListener('click', (e) => {
                     const id = e.target.dataset.id;
@@ -443,7 +476,7 @@
             document.querySelectorAll('.delete-button').forEach(button => {
                 button.addEventListener('click', (e) => {
                     const id = e.target.dataset.id;
-                    currentDeleteDocId = id; // Store ID for confirmation
+                    currentDeleteDocId = id;
                     confirmMessage.textContent = `هل تريد حذف الرابط: "${e.target.closest('div.flex.flex-col').querySelector('h3').textContent}" حقًا؟`;
                     confirmModal.classList.remove('hidden');
                 });
@@ -481,7 +514,7 @@
                 }
             });
 
-            categoryFilter.innerHTML = '<option value="">جميع التصنيفات</option>'; // Reset
+            categoryFilter.innerHTML = '<option value="">جميع التصنيفات</option>';
             categories.forEach(cat => {
                 const option = document.createElement('option');
                 option.value = cat;
@@ -494,21 +527,24 @@
          * Sets up real-time listener for learning links from Firestore.
          */
         function setupFirestoreListeners() {
-            console.log("setupFirestoreListeners called. db:", db); // Log at start of function
+            console.log("setupFirestoreListeners called. db:", db);
             if (!db) {
                 console.error("Firestore not initialized for listeners. Cannot set up snapshot listener.");
+                loadingMessage.textContent = 'خطأ في تحميل الروابط: لم يتم تهيئة قاعدة البيانات.';
+                loadingMessage.classList.remove('hidden');
+                noLinksMessage.classList.add('hidden');
                 return;
             }
 
             const q = query(collection(db, collectionPath));
 
             onSnapshot(q, (snapshot) => {
-                allLinks = []; // Clear and repopulate allLinks
+                allLinks = [];
                 snapshot.forEach((doc) => {
                     allLinks.push({ id: doc.id, ...doc.data() });
                 });
-                populateCategoryFilter(); // Update category filter options
-                applyFiltersAndSearch(); // Re-render with current filters
+                populateCategoryFilter();
+                applyFiltersAndSearch();
             }, (error) => {
                 console.error("Error listening to links:", error);
                 showMessage(`خطأ في جلب الروابط: ${error.message}`, 'error');
@@ -531,7 +567,7 @@
             editLinkName.value = name;
             editLinkUrl.value = url;
             editCategory.value = category;
-            editLinkType.value = type; // Display type but don't allow editing for simplicity
+            editLinkType.value = type;
             editModal.classList.remove('hidden');
         }
 
@@ -546,11 +582,13 @@
          * Updates a link in Firestore with new data from the edit modal.
          */
         async function updateLink() {
-            console.log("updateLink called. firebaseInitialized:", firebaseInitialized, "db:", db); // Log at start of function
-            // Check if Firebase is fully initialized before attempting Firestore ops
+            console.log("updateLink called. firebaseInitialized:", firebaseInitialized, "db:", db);
             if (!firebaseInitialized || !db) {
-                showMessage('الرجاء الانتظار حتى يتم تحميل النظام بالكامل قبل تحديث رابط.', 'info');
+                showMessage('الرجاء الانتظار حتى يتم تحميل النظام بالكامل قبل تحديث رابط. يتم إعادة التهيئة تلقائياً.', 'info');
                 console.error("Firebase not ready or db not initialized for update.");
+                 if (!db) { // Only if db object is missing
+                    initializeFirebase();
+                }
                 return;
             }
 
@@ -558,14 +596,13 @@
             const newName = editLinkName.value.trim();
             const newUrl = editLinkUrl.value.trim();
             const newCategory = editCategory.value.trim();
-            const linkType = editLinkType.value; // Get the original type for validation
+            const linkType = editLinkType.value;
 
             if (!newName || !newUrl) {
                 showMessage('الرجاء إدخال اسم الرابط وعنوانه للتعديل.', 'error');
                 return;
             }
 
-            // Re-validate URL based on original type
             let isValidUrl = false;
             switch (linkType) {
                 case 'youtube':
@@ -585,7 +622,7 @@
                     if (!isValidUrl) showMessage('الرجاء إدخال رابط ويب صالح.', 'error');
                     break;
                 default:
-                    isValidUrl = true; // Should not happen if type is valid
+                    isValidUrl = true;
             }
 
             if (!isValidUrl) return;
@@ -610,11 +647,13 @@
          * @param {string} docId - The document ID of the link to delete.
          */
         async function deleteLink(docId) {
-            console.log("deleteLink called. firebaseInitialized:", firebaseInitialized, "db:", db); // Log at start of function
-            // Check if Firebase is fully initialized before attempting Firestore ops
+            console.log("deleteLink called. firebaseInitialized:", firebaseInitialized, "db:", db);
             if (!firebaseInitialized || !db) {
-                showMessage('الرجاء الانتظار حتى يتم تحميل النظام بالكامل قبل حذف رابط.', 'info');
+                showMessage('الرجاء الانتظار حتى يتم تحميل النظام بالكامل قبل حذف رابط. يتم إعادة التهيئة تلقائياً.', 'info');
                 console.error("Firebase not ready or db not initialized for delete.");
+                 if (!db) { // Only if db object is missing
+                    initializeFirebase();
+                }
                 return;
             }
 
@@ -631,12 +670,12 @@
         addLinkButton.addEventListener('click', addLink);
         searchInput.addEventListener('input', applyFiltersAndSearch);
         categoryFilter.addEventListener('change', applyFiltersAndSearch);
-        typeFilter.addEventListener('change', applyFiltersAndSearch); // New filter for type
+        typeFilter.addEventListener('change', applyFiltersAndSearch);
 
         // Edit Modal Event Listeners
         saveEditButton.addEventListener('click', updateLink);
         cancelEditButton.addEventListener('click', closeEditModal);
-        editModal.addEventListener('click', (e) => { // Close modal when clicking outside content
+        editModal.addEventListener('click', (e) => {
             if (e.target === editModal) {
                 closeEditModal();
             }
@@ -646,32 +685,17 @@
         confirmYesButton.addEventListener('click', () => {
             if (currentDeleteDocId) {
                 deleteLink(currentDeleteDocId);
-                currentDeleteDocId = null; // Reset
+                currentDeleteDocId = null;
             }
             confirmModal.classList.add('hidden');
         });
         confirmNoButton.addEventListener('click', () => {
-            currentDeleteDocId = null; // Reset
+            currentDeleteDocId = null;
             confirmModal.classList.add('hidden');
         });
 
         // Initialize Firebase when the window loads
         window.onload = initializeFirebase;
-
-        /*
-         * ملاحظة حول دمج واجهة برمجة تطبيقات YouTube/Telegram/Website (API):
-         *
-         * جلب البيانات تلقائيًا (مثل عدد المشتركين، الوصف، أو معلومات الموقع) من واجهات برمجة التطبيقات
-         * الخاصة بيوتيوب، تيليجرام، أو أي موقع آخر مباشرةً من تطبيق العميل (مثل ملف HTML هذا)
-         * لا يُنصح به عادةً بسبب المخاوف الأمنية (كشف مفتاح API الخاص بك) وسياسات
-         * مشاركة الموارد عبر النطاقات (CORS).
-         *
-         * الإعداد النموذجي لذلك يتضمن استخدام خادم خلفي صغير (مثل Node.js، Python)
-         * يحتفظ بمفتاح API ويقوم بإجراء المكالمات إلى واجهة برمجة التطبيقات الخارجية.
-         * سيقوم تطبيق الواجهة الأمامية بإرسال طلب إلى هذا الخادم الخلفي، والذي بدوره
-         * يستدعي واجهة برمجة التطبيقات، ثم يعيد البيانات إلى تطبيق العميل.
-         * هذا يحمي مفتاح API ويتجاوز مشكلات CORS.
-         */
     </script>
 </body>
 </html>
